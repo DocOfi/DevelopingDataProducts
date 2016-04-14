@@ -1,0 +1,429 @@
+---
+title: "Comparing Algorithms"
+author: "DocOfi"
+date: "October 16, 2015"
+output:
+  html_document:
+    keep_md: yes
+    toc: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+###Edgar Anderson's Iris Data
+We will be comparing the performance of different classifiers on the famous (Fisher's or Anderson's) iris data set which gives the measurements in centimeters of the variables sepal length and width and petal length and width, respectively, for 50 flowers from each of 3 species of iris. The species are Iris setosa, versicolor, and virginica. I divided the raw data in half to create a training and testing dataset to assess the model's performance.  The model's accuracy and kappa values on the training and testing dataset are used as reference.
+
+What i'm particularly interested in are, which particular data points are commonly or unusually misclassified and which models misclassify the same pattern of data points. I made a plot with the shape of the data points to illustrate the species to which the data point belong.  The color of the data point reveals whether the data point was correctly or incorrectly classified by the model.  I created a table of contents that will make it easirer to jump to the different plots at the click of a mouse.  You can load this html doument in three to four windows to make the comparison easier.
+
+At the bottom of the document, the testing dataset is available for your perusal.  You might be wondering why in certain plots the misclassified point may be missing.  This is caused by overplotting, one or more data points occupy the same space.  The darker color of the correctly classified data point masks the lighter color of the misclassified point.  I included a table of the unique values in each variable so you can see which have duplicate values to make it easier to identify where the misclassified point is located.  I also created 2 plots per model with the same variable on the x-axis to make it easier to find the masked misclassified point and to give an additional dimension in viewing the data points.  
+
+###A brief look at the data
+```{r, readdata, cache=TRUE}
+library(knitr)
+library(ggplot2)
+data("iris")
+str(iris)
+print(kable(summary(iris)))
+```
+
+###Creating a training and testing data set and setting the parameters for cross validation
+```{r, divdata, cache=TRUE}
+library(caret)
+set.seed(117)
+inTrain <- createDataPartition(y=iris$Species,p=0.5,list=FALSE)
+training <- iris[inTrain,] 
+testing <- iris[-inTrain,]
+ctrl = trainControl(method="repeatedcv", number=10, repeats=5)
+```
+
+###Plotting the data with the shape and color describing the Species to which it belongs.
+```{r, rawdataplot1,fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = Species, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, rawdataplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = Species, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+####RPART Model
+```{r, rpartchnk, cache=TRUE}
+set.seed(117)
+rpart_fit <- train(Species~.,method="rpart",data=training, tuneLength = 15, trControl = ctrl)
+rpart_pred <-predict(rpart_fit, newdata = testing)
+```
+
+####Model Performance 
+```{r, rpartres}
+library(caret)
+rpart_correct <- rpart_pred == testing$Species
+confusionMatrix(rpart_fit)###Misclasification on the training data
+table(rpart_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(rpart_fit)###Model's performance on the training data
+postResample(rpart_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the rpart plot
+```{r, rpartplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = rpart_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, rpartplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = rpart_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the rpart plot.**
+```{r, missingpointsrpart}
+testing2 <- testing
+testing2$Row.Num <- rownames(testing2)
+rownames(testing2) <- NULL
+subset(testing2, Row.Num == 107 | Row.Num == 77 | Row.Num == 53 | Row.Num == 78)
+```
+
+####Linear Discriminant Analysis (LDA)  Model
+```{r, ldachnk, cache=TRUE}
+set.seed(117)
+lda_fit <- train(Species~.,method="lda",data=training, tuneLength = 15, trControl = ctrl)
+lda_pred <-predict(lda_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, ldatres}
+library(caret)
+lda_correct <- lda_pred == testing$Species
+confusionMatrix(lda_fit)###Misclasification on the training data
+table(lda_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(lda_fit)###Model's performance on the training data
+postResample(lda_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the lda plot
+```{r, ldaplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = lda_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, ldaplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = lda_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the lda plot.**
+```{r, missingpointslda}
+subset(testing2, Row.Num == 78)
+```
+
+####Support Vector Machine (SVM) Model
+```{r, svmchnk, cache=TRUE, warning=FALSE}
+set.seed(117)
+svm_fit <- train(Species~.,method="svmRadial",data=training, tuneLength = 15, trControl = ctrl)
+svm_pred <-predict(svm_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, svmres}
+library(caret)
+svm_correct <- svm_pred == testing$Species
+confusionMatrix(svm_fit)###Misclasification on the training data
+table(svm_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(svm_fit)###Model's performance on the training data
+postResample(svm_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the svm plot
+```{r, svmplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = svm_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, svmplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = svm_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the svm plot.**
+```{r, missingpointssvm}
+subset(testing2, Row.Num == 42 | Row.Num == 107 | Row.Num == 135 | Row.Num == 78 | Row.Num == 69)
+```
+
+####Random Forest Model
+```{r, rfchnk, cache=TRUE, warning=FALSE}
+set.seed(117)
+rf_fit <- train(Species~.,method="rf",data=training, tuneLength = 15, trControl = ctrl)
+rf_pred <-predict(rf_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, rfres}
+library(caret)
+rf_correct <- rf_pred == testing$Species
+confusionMatrix(rf_fit)###Misclasification on the training data
+table(rf_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(rf_fit)###Model's performance on the training data
+postResample(rf_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the rf plot
+```{r, rfplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = rf_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, rfplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = rf_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the rf plot.**
+```{r, missingpointsrf}
+subset(testing2, Row.Num == 135 | Row.Num == 107 | Row.Num == 78)
+```
+
+####Stochastic Gradient Boosting Model
+```{r, gbmchnk, cache=TRUE, warning=FALSE}
+set.seed(117)
+gbm_fit <- train(Species~.,method="gbm",data=training, tuneLength = 15, trControl = ctrl, verbose = FALSE)
+gbm_pred <-predict(gbm_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, gbmres}
+library(caret)
+gbm_correct <-gbm_pred == testing$Species
+confusionMatrix(gbm_fit)###Misclasification on the training data
+table(gbm_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(gbm_fit)###Model's performance on the training data
+postResample(gbm_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the  gbm plot
+```{r, gbmplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = gbm_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, gbmplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = gbm_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the gbm plot.**
+```{r, missingpointsgbm}
+subset(testing2, Row.Num == 127 | Row.Num == 107 | Row.Num == 78 | Row.Num == 53)
+```
+
+####Penalized Logistic Regression Model 
+```{r, plrchnk, cache=TRUE, warning=FALSE}
+set.seed(117)
+plr_fit <- train(Species~.,method="plr",data=training, tuneLength = 15, trControl = ctrl)
+plr_pred <-predict(plr_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, plrres}
+library(caret)
+plr_correct <-plr_pred == testing$Species
+confusionMatrix(plr_fit)###Misclasification on the training data
+table(plr_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(plr_fit)###Model's performance on the training data
+postResample(plr_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the plr plot
+```{r, plrplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = plr_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, plrplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = plr_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the plr plot. I need to find out why???**
+```{r, missingpointsplr}
+subset(testing2, Species == "virginica")
+```
+
+####Partial Least Squares Model
+```{r, plschnk, cache=TRUE, warning=FALSE}
+set.seed(117)
+pls_fit <- train(Species~.,method="pls",data=training, tuneLength = 15, trControl = ctrl)
+pls_pred <-predict(pls_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, plsres}
+library(caret)
+pls_correct <-pls_pred == testing$Species
+confusionMatrix(pls_fit)###Misclasification on the training data
+table(pls_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(pls_fit)###Model's performance on the training data
+postResample(pls_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the pls plot
+```{r, plsplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = pls_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, plsplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = pls_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**There are so many misclassified points on the pls plot.**
+
+####Naive Bayes Model 
+```{r, nbchnk, cache=TRUE, warning=FALSE}
+set.seed(117)
+nb_fit <- train(Species~.,method="nb",data=training, tuneLength = 15, trControl = ctrl)
+nb_pred <-predict(nb_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, nbres}
+library(caret)
+nb_correct <-nb_pred == testing$Species
+confusionMatrix(nb_fit)###Misclasification on the training data
+table(nb_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(nb_fit)###Model's performance on the training data
+postResample(nb_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the nb plot
+```{r, nbplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = nb_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, nbplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = nb_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the nb plot.**
+```{r, missingpointsgbmm}
+subset(testing2, Row.Num == 107 | Row.Num == 78 | Row.Num == 53)
+```
+
+####Neural Network Model 
+```{r, nnetchnk, cache=TRUE, warning=FALSE, message=FALSE,results='hide'}
+set.seed(117)
+nnet_fit <- train(Species~.,method="nnet",data=training, tuneLength = 15, trControl = ctrl, verbose=FALSE)
+nnet_pred <-predict(nnet_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, nnetres}
+library(caret)
+nnet_correct <-nnet_pred == testing$Species
+confusionMatrix(nnet_fit)###Misclasification on the training data
+table(nnet_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(nnet_fit)###Model's performance on the training data
+postResample(nnet_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the nnet plot
+```{r, nnetplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = nnet_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, nnetplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = nnet_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the nnet plot.**
+```{r, missingpointsnnet}
+subset(testing2, Row.Num == 78 | Row.Num == 69 | Row.Num == 88)
+```
+
+####Bagged CART Model treebag
+```{r, treebagchnk, cache=TRUE, warning=FALSE, message=FALSE}
+set.seed(117)
+treebag_fit <- train(Species~.,method="treebag",data=training, tuneLength = 15, trControl = ctrl, verbose=FALSE)
+treebag_pred <-predict(treebag_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, treebagres}
+library(caret)
+treebag_correct <-treebag_pred == testing$Species
+confusionMatrix(treebag_fit)###Misclasification on the training data
+table(treebag_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(treebag_fit)###Model's performance on the training data
+postResample(treebag_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the treebag plot
+```{r, treebagplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = treebag_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, treebagplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = treebag_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the treebag plot.**
+```{r, missingpointstreebag}
+subset(testing2, Row.Num == 107 | Row.Num == 78 | Row.Num == 135 | Row.Num == 53)
+```
+
+####Penalized Multinomial Regression Model 
+```{r, multinomchnk, cache=TRUE, warning=FALSE, message=FALSE,results='hide'}
+set.seed(117)
+multinom_fit <- train(Species~.,method="multinom",data=training, tuneLength = 15, trControl = ctrl, verbose=FALSE)
+multinom_pred <-predict(multinom_fit, newdata = testing)
+```
+
+####Model Performance
+```{r, multinomres}
+library(caret)
+multinom_correct <-multinom_pred == testing$Species
+confusionMatrix(multinom_fit)###Misclasification on the training data
+table(multinom_pred,testing$Species)###Misclasification on the testing data
+getTrainPerf(multinom_fit)###Model's performance on the training data
+postResample(multinom_pred, testing$Species)###Model's performance on the testing data
+```
+
+###Misclassified points illustrated in the multinom plot
+```{r, multinomplot1, fig.height=4,fig.width=13}
+library(ggplot2)
+ggplot(testing) + geom_point(aes(Petal.Length, Petal.Width, colour = multinom_correct, shape = Species),size = 2.5) + labs(x = "Petal.Length", y = "Petal.Width") 
+```
+
+```{r, multinomtplot2,fig.height=4,fig.width=13}
+ggplot(testing) + geom_point(aes(Petal.Length, Sepal.Length, colour = multinom_correct, shape = Species), size = 2.5) + labs(x = "Petal.Length", y = "Sepal.Length") 
+```
+
+**These are the misclassified points on the multinom plot.**
+```{r, missingpointsmultinom}
+subset(testing2, Row.Num == 69)
+```
+
+###Finding the missing points
+```{r, duplicate}
+table(testing$Sepal.Length)
+table(testing$Petal.Width)
+table(testing$Petal.Length)
+print(testing[order(testing$Petal.Length),])
+```
+
+###Frequently Missed data points
+
+```{r, missingpointsall}
+library(knitr)
+Missed_points <- subset(testing2, Row.Num == 42 | Row.Num == 53 | Row.Num == 69 | Row.Num == 77 | Row.Num == 78 | Row.Num == 88 | Row.Num == 107 | Row.Num == 127 | Row.Num == 135)
+Missed_points$Times.Missed <- c(1, 4, 3, 1, 7, 1, 6, 1, 3)
+print(kable(Missed_points[order(Missed_points$Times.Missed),]))
+``` 
+
+**I did not include the missing points in the svm and plr models in the tally above because they were too many. There was probably a mistake in the tuning parameter that i didn't take into consideration.**
+
+###Conclusion
+
+The penalized multinomial regression model and the linear discriminatory model performed the best with only one misclassified data point on the testing data set.  The most common data point that was misclassified  belongs to row 78 of the versicolor species.  Most of the point that were misclassified were in the area where the the versicolor and virginica species intermingled.  
+
+It was quite a surprise when the penalized logistic regression model misclassified the whole virginica species and partail least square model misclassifed a data point in the setosa species.  Even more surprising is when the neural network model and the support vector machine model miisclassified a point which has a duplicate value only one of the duplicate was misclassified.  
+
+```{r, sessinfo, eval=TRUE}
+sessionInfo()
+```
